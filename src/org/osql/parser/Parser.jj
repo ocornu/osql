@@ -1,0 +1,293 @@
+/*
+ * Copyright (C) Olivier Cornu 2004-2009 <o.cornu@gmail.com>
+ * 
+ * This is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This file is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License along
+ * with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+options {				// Default values for javacc options
+  LOOKAHEAD = 1;
+  CHOICE_AMBIGUITY_CHECK = 2;
+  OTHER_AMBIGUITY_CHECK = 1;
+  STATIC = false;			// Default is true
+  DEBUG_PARSER = false;
+  DEBUG_LOOKAHEAD = false;
+  DEBUG_TOKEN_MANAGER = false;
+  ERROR_REPORTING = true;
+  JAVA_UNICODE_ESCAPE = false;
+  UNICODE_INPUT = false;
+  IGNORE_CASE = true;
+  USER_TOKEN_MANAGER = false;
+  USER_CHAR_STREAM = false;
+  BUILD_PARSER = true;
+  BUILD_TOKEN_MANAGER = true;
+  SANITY_CHECK = true;
+  FORCE_LA_CHECK = false;
+}
+
+
+// ==================================================
+
+
+PARSER_BEGIN(Parser)
+
+package org.osql.parser;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.util.Vector;
+import org.osql.*;
+
+public class Parser {
+/*  public static void main(String args[]) {// throws ParseException {
+    try {
+    	File file = new java.io.File("/home/zit/private/projects/OSQL/src/org/osql/parser/test");
+    	FileInputStream in = new FileInputStream(file);
+        Parser parser = new Parser(in);
+        StringBuffer s = new StringBuffer();
+        parser.Where(s);
+        System.out.println(s);
+//		RuleFactory factory = new RuleFactory(new org.clanspy.games.et.Game());
+//		System.out.println(parser.recordInto(factory)+" rules loaded.");
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
+  }*/
+}
+
+PARSER_END(Parser)
+
+
+// ==================================================
+
+
+SKIP :					// Default skip policy
+{
+	" "							// Skip spaces
+|	"\t"							// Skip tabulations
+|	"\n"							// Skip line-feeds
+|	"\r"							// Skip carriage-returns
+|	"\f"
+}
+
+TOKEN :
+{
+//	Group separators
+	<LP:	"("		>
+|	<RP:	")"		>
+// Keywords
+|	<NOT:		"NOT"	>
+|	<AND:		"AND"	>
+|	<OR:		"OR"	>
+|	<SMALLEROREQ:	"<="	>
+|	<BIGGEROREQ:	">="	>
+|	<NOTEQUAL:	( "!=" | "<>" )	>
+|	<EQUAL:		"="		>
+|	<SMALLER:	"<"		>
+|	<BIGGER:	">"		>
+//|	<IS:		"IS"	>
+|	<IN:		"IN"	>
+|	<BETWEEN:	"BETWEEN"	>
+|	<LIKE:		"LIKE"	>
+|	<TRUE:		"TRUE"	>
+|	<FALSE:		"FALSE"	>
+|	<NULL:		"NULL"	>
+|	<ESCAPE:	"ESCAPE"	>
+// Functions
+|	<BITAND:	"BITAND"	>
+|	<VALUE:		"value"	>
+}
+
+SKIP :
+{
+	"'"		: _STRING
+}
+<_STRING> TOKEN :
+{
+	<STRING:		( ~["'"] )+								>
+}
+<_STRING> SKIP :
+{
+	"'"		: DEFAULT
+}
+
+TOKEN :
+{
+	<SUPER:		"super."	>
+|	<DOT:		"."			>	
+|	<COMMA:		","			>	
+|	<FIELD:		( <LETTER> | <SYMBOL> ) ( <LETTER> | <SYMBOL> | <NUM> )*	>
+|		<#LETTER:	["a"-"z"]		>
+|		<#NUM:		["0"-"9"]		>
+|		<#SYMBOL:	( "_" | "$" )	>
+|	<INTEGER:	( "0" | ( ["1"-"9"] (<NUM>)* ) )	>
+|	<FLOAT:		<INTEGER> <DOT> <DECIMAL>		>
+|		<#DECIMAL:	( <NUM> )+ ( "E" (<PLUS>|<MINUS>)? <NUM> )?	>
+|	<PLUS:		"+"			>
+|	<MINUS:		"-"			>
+|	<MULT:		"*"			>
+|	<DIV:		"/"			>
+}
+
+
+// ==================================================
+
+void Where(Database db, ClassTable t, StringBuffer w, StringBuffer f, StringBuffer j)
+throws OSQLException:
+{}
+{
+	Expression(db, t, w, f, j)
+	<EOF>
+}
+
+void Expression(Database db, ClassTable t, StringBuffer w, StringBuffer f, StringBuffer j)
+throws OSQLException:
+{}
+{
+	( <NOT> {w.append("NOT ");} )?
+	Condition(db, t, w, f, j)
+	(
+		( <AND> {w.append(" AND ");} | <OR> {w.append(" OR ");} )
+		( <NOT> {w.append("NOT ");} )?
+		Condition(db, t, w, f, j)
+	)*
+}
+
+
+void Condition(Database db, ClassTable t, StringBuffer w, StringBuffer f, StringBuffer j)
+throws OSQLException:
+{}
+{
+	(
+			<LP>	{ w.append("("); }
+			Expression(db, t, w, f, j)
+			<RP>	{ w.append(")"); }
+	)
+	|
+	(	Value(db, t, w, f, j)
+		(
+			(	(	<EQUAL>			{ w.append("="); }
+				|	<NOTEQUAL>		{ w.append("!="); }
+				|	<SMALLER>		{ w.append("<"); }
+				|	<SMALLEROREQ>	{ w.append("<="); }
+				|	<BIGGER>		{ w.append(">"); }
+				|	<BIGGEROREQ>	{ w.append(">="); }
+				)
+				Value(db, t, w, f, j)
+			)
+		|	(	<BETWEEN>		{ w.append(" BETWEEN "); }
+				Value(db, t, w, f, j)
+				<AND>			{ w.append(" AND "); }
+				Value(db, t, w, f, j)
+			)
+		|	(	( <NOT>			{ w.append(" NOT"); }	)?
+				(	(	<IN> <LP>	{ w.append(" IN ("); }
+						Value(db, t, w, f, j)
+						(	<COMMA>	{ w.append(", "); }
+							Value(db, t, w, f, j)
+						)*
+						<RP>		{ w.append(")"); }
+					)
+				|	(	<LIKE>		{ w.append(" LIKE "); }
+						Value(db, t, w, f, j)
+					)
+				)
+			)
+		)
+	)
+}
+
+
+void Value(Database db, ClassTable t, StringBuffer w, StringBuffer f, StringBuffer j)
+throws OSQLException:
+{}
+{
+	(
+		( <PLUS> { w.append("+"); } | <MINUS> { w.append("-"); } )?
+		Term(db, t, w, f, j)
+		(
+			( <PLUS>	{ w.append("+"); }
+			| <MINUS>	{ w.append("-"); }
+			| <MULT>	{ w.append("*"); }
+			| <DIV>		{ w.append("/"); }
+			)
+			Term(db, t, w, f, j)
+		)?
+	)
+}
+
+
+void Term(Database db, ClassTable t, StringBuffer w, StringBuffer f, StringBuffer j)
+throws OSQLException:
+{
+	Token token;
+	String last;
+	ClassTable sub;
+	StringBuffer label;
+	int deep = 0;
+}
+{
+	token=<STRING>		{ w.append("'"); w.append(token.image); w.append("'"); }
+|	token=<INTEGER>		{ w.append(token.image); }
+|	token=<FLOAT>		{ w.append(token.image); }
+|	<TRUE>				{ w.append("TRUE"); }
+|	<FALSE>				{ w.append("FALSE"); }
+|	<NULL>				{ w.append("NULL"); }
+|	(	{ label=new StringBuffer("\""); }
+		( <SUPER>		{ label.append("super.");
+						  t = t.superClassTable;
+						} )*
+		token=<FIELD>	{ label.append(token.image);
+						  last = token.image;
+						  sub = t;
+						}
+		( <DOT> token=<FIELD>	{ label.append('.'); label.append(token.image);
+								  t = sub;
+								  sub = t.getFieldTable(db, last);
+								  StringBuffer tmp = new StringBuffer();
+								  tmp.append(" JOIN \"");
+								  tmp.append(sub.table.name);
+								  tmp.append("\" ON \"");
+								  tmp.append(sub.table.name);
+								  tmp.append("\".\"");
+								  tmp.append(sub.table.primaryKey);
+								  tmp.append("\"=\"");
+//								  if (deep>0) {
+									  tmp.append(t.table.name);
+									  tmp.append("\".\"");
+//								  }
+								  tmp.append(last);
+								  tmp.append("\"");
+								  if (j.indexOf(tmp.toString())==-1)
+								  		j.append(tmp);
+								  last = token.image;
+								  deep++;
+								} )*
+		{ label.append("\"");
+		  w.append(label);
+		  if (deep>0) {
+			  f.append(", \"");
+			  f.append(sub.table.name);
+			  f.append("\".\"");
+			  f.append(last);
+			  f.append("\" AS ");
+			  f.append(label);
+		  }
+		  if (db.logLevel==db.LOG_DEBUG) {
+			  System.out.print("Parser: "+label.toString()+" : [");
+			  System.out.println(f.toString()+"|"+j.toString()+"]");
+		  }
+		}
+	)
+}
+
+                         
